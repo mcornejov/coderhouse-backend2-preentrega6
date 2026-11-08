@@ -215,11 +215,11 @@ usuario en `req.user` y el controller emite la misma cookie `currentUser` de sie
 
 | Campo | Tipo | Reglas |
 |-------|------|--------|
-| `title` | String | Obligatorio, texto no vacío |
-| `description` | String | Obligatorio, texto no vacío |
-| `category` | String | Obligatorio. Se guarda en minúsculas y sin espacios en los extremos (`cata`, `taller`, `charla`, `musica`, `workshop`...), así el filtro por categoría es una igualdad exacta |
-| `date` | Date | Obligatoria, texto ISO 8601 con día existente, **posterior al momento actual** (al crear y al modificar) |
-| `location` | String | Obligatorio, texto no vacío |
+| `title` | String | Obligatorio, texto no vacío, hasta 200 caracteres |
+| `description` | String | Obligatorio, texto no vacío, hasta 2000 caracteres |
+| `category` | String | Obligatorio, hasta 50 caracteres. Se guarda en minúsculas y sin espacios en los extremos (`cata`, `taller`, `charla`, `musica`, `workshop`...), así el filtro por categoría es una igualdad exacta |
+| `date` | Date | Obligatoria, texto ISO 8601 con día existente, **posterior al momento actual** (al crear y al modificar). Se guarda en UTC: `"2027-03-15"` y `"2027-03-15T19:00:00"` (sin zona) se interpretan como UTC, `"2027-03-15T19:00:00-03:00"` se convierte |
+| `location` | String | Obligatorio, texto no vacío, hasta 200 caracteres |
 | `capacity` | Number | Obligatorio, entero **mayor que 0** |
 | `price` | Number | Opcional, número **mayor o igual a 0** (por defecto `0`) |
 | `status` | String | `enum` `draft` \| `published` \| `cancelled` \| `finished`. Nace en `draft`; solo cambia por `PATCH .../status` |
@@ -268,9 +268,12 @@ conservan su historial. No hay `DELETE /api/events/:eid`.
 | No se publica un evento cuya fecha ya pasó (sí se puede cancelar) | estado | `409` `No se puede publicar un evento cuya fecha ya pasó` |
 | La escritura exige el estado que se leyó (si otra petición lo cambió en el medio, no se pisa) | modificar, estado | `409` `El evento cambió a estado cancelled mientras se procesaba la petición` |
 
-El orden de verificación es: ¿existe? (`404`) → ¿es tuyo o eres admin? (`403`) → ¿sigue
-modificable? (`409`) → ¿los datos son válidos? (`400`). Así un `organizer` ajeno recibe siempre
-`403` y no descubre, por el código de error, en qué estado está un evento que no le pertenece.
+El orden de verificación sobre un evento es: ¿existe? (`404`) → ¿es tuyo o eres admin? (`403`) →
+¿sigue modificable? (`409`) → ¿la acción es coherente y los datos válidos? (`400`/`409`). Así un
+`organizer` ajeno recibe `403` y no descubre, por el código de error, en qué estado está un evento
+que no le pertenece. La única comprobación previa a cargar el evento es la **forma** del body en
+`PATCH .../status`: un `status` ausente o desconocido es `400` antes de consultar la base, porque no
+hay nada que buscar para una petición mal formada.
 
 ### Códigos de error
 
@@ -427,8 +430,8 @@ ascendente. Todos los parámetros son opcionales y se combinan entre sí.
 | `status` | `draft` · `published` · `cancelled` · `finished` | Igualdad exacta |
 | `category` | texto | Igualdad exacta sin distinguir mayúsculas (`Workshop` = `workshop`) |
 | `location` | texto | Contiene el texto, sin distinguir mayúsculas (`providencia` encuentra `Café Aurora, Providencia`) |
-| `dateFrom` | fecha ISO 8601 | Eventos con `date >= dateFrom` |
-| `dateTo` | fecha ISO 8601 | Eventos con `date <= dateTo`. Si viene sin hora (`2027-03-15`) abarca el día completo |
+| `dateFrom` | fecha ISO 8601 | Eventos con `date >= dateFrom` (sin zona horaria se interpreta como UTC) |
+| `dateTo` | fecha ISO 8601 | Eventos con `date <= dateTo`. Si viene sin hora (`2027-03-15`) abarca el día completo (UTC) |
 | `page` | entero ≥ 1 (por defecto `1`) | Página a devolver |
 | `limit` | entero entre 1 y 50 (por defecto `10`) | Tamaño de página. El máximo evita traer toda la colección |
 | `sort` | `date` · `price` · `title` · `capacity` · `createdAt`, con `-` delante para descendente (por defecto `date`) | Orden. Siempre se desempata por id para que las páginas no repitan ni pierdan eventos |
@@ -495,7 +498,7 @@ Response `201`:
 | `403` | Sesión válida con rol `user` | `{ "status": "error", "message": "No tienes permisos para realizar esta acción" }` |
 | `400` | Faltan campos | `{ "status": "error", "message": "Faltan campos obligatorios: description, category" }` |
 | `400` | Fecha pasada | `{ "status": "error", "message": "La fecha del evento no puede ser pasada" }` |
-| `400` | Valor inválido | `El campo capacity debe ser un entero mayor que 0` · `El campo price debe ser un número mayor o igual a 0` · `El campo date debe ser una fecha válida en formato ISO 8601` · `El campo category debe ser un texto no vacío` (análogos para `title`, `description`, `location`) |
+| `400` | Valor inválido | `El campo capacity debe ser un entero mayor que 0` · `El campo price debe ser un número mayor o igual a 0` · `El campo date debe ser una fecha válida en formato ISO 8601` · `El campo category debe ser un texto no vacío` · `El campo title no puede superar los 200 caracteres` (análogos para `description`, `location`) |
 | `413` | Body mayor a 100 KB | `{ "status": "error", "message": "El cuerpo de la petición es demasiado grande" }` |
 
 ### `PUT /api/events/:eid`
@@ -742,14 +745,16 @@ Todos los casos anteriores están automatizados:
 pnpm test
 ```
 
-131 tests con MongoDB en memoria. Los 81 heredados siguen pasando (autenticación con Passport,
+132 tests con MongoDB en memoria. Los 81 heredados siguen pasando (autenticación con Passport,
 registro, login, cookie, configuración, matriz de roles, `authorize`, tabla 401/403 de todas las
 rutas privadas, recurso `/api/users`); solo cambió lo que la consigna cambia: el listado responde
-paginado y `description`/`category` pasan a ser obligatorios. Los 50 nuevos cubren esta entrega:
+paginado, `description`/`category` pasan a ser obligatorios y las fechas sin zona se guardan en UTC.
+Los 51 nuevos cubren esta entrega:
 
 - `test/events-rules.test.js`: fecha pasada al crear y al modificar → `400` sin tocar la base; el
   instante exacto de "ahora" también cuenta como pasado (reloj inyectado al servicio);
-  `description` y `category` obligatorios y de texto; `category` normalizada a minúsculas;
+  `description` y `category` obligatorios y de texto; largo máximo de los textos (`400` con el
+  límite en el mensaje; el esquema lo repite); `category` normalizada a minúsculas;
   `organizer` guardado como referencia; el esquema de Mongoose rechaza `capacity: 0` y estados
   inventados; `PUT` sobre un evento `cancelled` o `finished` → `409` (también para `admin`); la
   propiedad se verifica antes que el estado (`403` para el intruso); la escritura condicional
@@ -768,7 +773,7 @@ paginado y `description`/`category` pasan a ser obligatorios. Los 50 nuevos cubr
   distinguir mayúsculas), el caso exacto de la consigna
   `?status=published&category=workshop&page=2&limit=5`, `location` por texto contenido con
   caracteres especiales escapados (`.*` no encuentra nada), rango `dateFrom`/`dateTo` inclusivo con
-  `dateTo` sin hora = día completo; filtros inválidos → `400`; parámetros desconocidos ignorados;
+  `dateTo` sin hora = día completo y sin zona = UTC; filtros inválidos → `400`; parámetros desconocidos ignorados;
   orden por defecto, `sort=-date`, `price`, `title`, `capacity`; campos no ordenables → `400`;
   páginas sin repetir ni perder eventos con la misma fecha; y el servicio entrega al repositorio
   criterios neutros, sin operadores de MongoDB.
@@ -885,7 +890,7 @@ coderhouse-backend2-preentrega6/
 │   │   ├── db.config.js              # conexión a MongoDB con Mongoose
 │   │   ├── passport.config.js        # estrategias 'register', 'login' y 'current' centralizadas
 │   │   ├── roles.config.js           # ROLES, USER_ROLES, DEFAULT_ROLE y la matriz PERMISOS
-│   │   └── events.config.js          # estados, TRANSICIONES, estados finales, campos ordenables, paginación
+│   │   └── events.config.js          # estados, TRANSICIONES, estados finales, largos máximos, campos ordenables, paginación
 │   ├── routes/
 │   │   ├── index.js                  # router principal: monta los recursos bajo /api
 │   │   ├── health.router.js
@@ -923,7 +928,7 @@ coderhouse-backend2-preentrega6/
 │       ├── jwt.js                    # signToken (jsonwebtoken, HS256, JWT_SECRET); la verificación la hace passport-jwt
 │       ├── hash.js                   # hashPassword / comparePassword con bcrypt
 │       ├── cookies.util.js           # nombre y opciones de la cookie currentUser
-│       ├── validators.js             # isValidEmail, normalizeEmail, isIsoDateString, isDateOnlyString
+│       ├── validators.js             # isValidEmail, normalizeEmail, isIsoDateString, isDateOnlyString, toUtcIsoString
 │       ├── errors.util.js            # HttpError y errores 400 / 401 / 403 / 404 / 409
 │       └── responses.util.js         # helpers de respuesta uniforme (payload, message, listado paginado)
 ├── test/

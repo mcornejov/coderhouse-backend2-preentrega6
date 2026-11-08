@@ -4,6 +4,7 @@ import {
   EVENT_STATUSES,
   ESTADOS_FINALES,
   ESTADOS_MODIFICABLES,
+  LONGITUD_MAXIMA,
   esEstadoValido,
   puedeTransicionar,
   CAMPOS_ORDENABLES,
@@ -11,7 +12,7 @@ import {
   PAGINACION,
 } from '../config/events.config.js';
 import { BadRequestError, NotFoundError, ForbiddenError, ConflictError } from '../utils/errors.util.js';
-import { isNonEmptyString, isIsoDateString, isDateOnlyString } from '../utils/validators.js';
+import { isNonEmptyString, isIsoDateString, isDateOnlyString, toUtcIsoString } from '../utils/validators.js';
 
 // Campos que el cliente puede enviar al crear o modificar un evento. `organizer` y
 // `status` no están: el organizador sale de la sesión y el estado cambia solo por
@@ -202,8 +203,12 @@ export default class EventsService {
   // y "2027-02-30" se convertiría en el 2 de marzo. Además debe ser futura.
   #validarValores(evento) {
     for (const campo of ['title', 'description', 'category', 'location']) {
-      if (evento[campo] !== undefined && !isNonEmptyString(evento[campo])) {
+      if (evento[campo] === undefined) continue;
+      if (!isNonEmptyString(evento[campo])) {
         throw new BadRequestError(`El campo ${campo} debe ser un texto no vacío`);
+      }
+      if (evento[campo].length > LONGITUD_MAXIMA[campo]) {
+        throw new BadRequestError(`El campo ${campo} no puede superar los ${LONGITUD_MAXIMA[campo]} caracteres`);
       }
     }
     if (evento.category !== undefined) {
@@ -213,6 +218,8 @@ export default class EventsService {
       if (!isIsoDateString(evento.date)) {
         throw new BadRequestError('El campo date debe ser una fecha válida en formato ISO 8601');
       }
+      // Se guarda normalizada en UTC: una hora sin zona no depende del reloj del servidor
+      evento.date = toUtcIsoString(evento.date);
       if (this.#esPasada(evento.date)) {
         throw new BadRequestError('La fecha del evento no puede ser pasada');
       }
@@ -258,10 +265,10 @@ export default class EventsService {
         throw new BadRequestError(`El filtro ${nombre} debe ser una fecha válida en formato ISO 8601`);
       }
     }
-    if (parametros.dateFrom !== undefined) filtro.dateFrom = new Date(parametros.dateFrom);
+    if (parametros.dateFrom !== undefined) filtro.dateFrom = new Date(toUtcIsoString(parametros.dateFrom));
     if (parametros.dateTo !== undefined) {
       // "2027-03-15" sin hora se entiende como el día completo, no como su medianoche
-      const hasta = new Date(parametros.dateTo);
+      const hasta = new Date(toUtcIsoString(parametros.dateTo));
       filtro.dateTo = isDateOnlyString(parametros.dateTo) ? new Date(hasta.getTime() + 86_400_000 - 1) : hasta;
     }
     if (filtro.dateFrom && filtro.dateTo && filtro.dateFrom > filtro.dateTo) {

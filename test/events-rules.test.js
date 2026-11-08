@@ -80,6 +80,16 @@ describe('Campos obligatorios y normalización', () => {
     }
   });
 
+  test('los textos tienen largo máximo (service y esquema)', async () => {
+    const organizer = await crearUsuarioConRol('organizer');
+    const res = await request(app).post(EVENTS).set('Cookie', organizer.cookie).send({ ...eventoValido, title: 'x'.repeat(201) });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.message, 'El campo title no puede superar los 200 caracteres');
+    const justo = await request(app).post(EVENTS).set('Cookie', organizer.cookie).send({ ...eventoValido, title: 'x'.repeat(200) });
+    assert.equal(justo.status, 201);
+    await assert.rejects(Event.create({ ...eventoValido, location: 'y'.repeat(201), organizer: '665f2a1b2c3d4e5f6a7b8c9d' }), { name: 'ValidationError' });
+  });
+
   test('category se guarda en minúsculas y sin espacios en los extremos', async () => {
     const organizer = await crearUsuarioConRol('organizer');
     const creado = await crearEventoComo(organizer, { ...eventoValido, category: '  Taller ' });

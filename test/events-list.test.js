@@ -165,6 +165,8 @@ describe('Filtros', () => {
     assert.equal(hasta.body.total, 3, 'el evento de las 19:00 del 10 de mayo entra en el rango');
     const hastaExacto = await listar('?dateTo=2027-05-10T18:00:00.000Z&limit=50');
     assert.equal(hastaExacto.body.total, 2, 'con hora explícita el límite es exacto');
+    const sinZona = await listar('?dateTo=2027-05-10T19:00:00&limit=50');
+    assert.equal(sinZona.body.total, 3, 'sin zona se interpreta como UTC, no como hora local');
     const rango = await listar('?dateFrom=2027-06-01&dateTo=2027-08-31&limit=50');
     assert.deepEqual(rango.body.data.map((e) => e.title), ['Evento 04', 'Evento 05', 'Evento 06']);
   });

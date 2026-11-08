@@ -32,6 +32,20 @@ export function normalizeEmail(value) {
 // exista en ese mes, además de que el motor pueda interpretarla.
 const ISO_DATE_REGEX = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
+/**
+ * Normaliza una fecha ISO ya validada a su forma UTC ("2027-03-15T19:00:00.000Z").
+ * Una hora sin zona ("2027-03-15T19:00:00") se interpreta como UTC, igual que la forma
+ * solo-día: así el valor guardado no depende de la zona horaria del servidor.
+ * @param {string} value texto que ya pasó isIsoDateString
+ * @returns {string}
+ */
+export function toUtcIsoString(value) {
+  const tieneHora = value.includes('T');
+  const tieneZona = /(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+  const normalizado = tieneHora && !tieneZona ? `${value}Z` : value;
+  return new Date(normalizado).toISOString();
+}
+
 export function isIsoDateString(value) {
   if (typeof value !== 'string') return false;
   const partes = ISO_DATE_REGEX.exec(value);

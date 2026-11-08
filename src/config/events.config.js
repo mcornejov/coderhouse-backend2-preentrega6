@@ -46,6 +46,14 @@ export function puedeTransicionar(desde, hacia) {
   return (TRANSICIONES[desde] ?? []).includes(hacia);
 }
 
+// Largo máximo de los textos del evento (el esquema de Mongoose repite estos límites)
+export const LONGITUD_MAXIMA = Object.freeze({
+  title: 200,
+  description: 2000,
+  category: 50,
+  location: 200,
+});
+
 // Listado: campos por los que se puede ordenar y límites de paginación.
 // Siempre se pagina: el límite máximo evita que una petición pida toda la colección.
 export const CAMPOS_ORDENABLES = Object.freeze(['date', 'price', 'title', 'capacity', 'createdAt']);

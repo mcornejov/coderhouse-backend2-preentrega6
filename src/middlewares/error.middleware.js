@@ -41,9 +41,12 @@ export function errorHandler(error, req, res, next) {
     return responderError(res, 400, mensaje);
   }
 
-  // Índice único violado (por ejemplo, dos registros simultáneos con el mismo email)
+  // Índice único violado. keyPattern dice qué índice fue: hoy solo el email de User;
+  // cualquier otro índice único futuro recibe un mensaje genérico en vez de uno equivocado.
   if (error.code === 11000) {
-    return responderError(res, 409, 'El email ya está registrado');
+    const campos = Object.keys(error.keyPattern ?? {});
+    const mensaje = campos.includes('email') ? 'El email ya está registrado' : 'Ya existe un registro con esos datos';
+    return responderError(res, 409, mensaje);
   }
 
   console.error(error);

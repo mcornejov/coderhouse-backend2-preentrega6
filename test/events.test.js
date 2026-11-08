@@ -101,10 +101,17 @@ describe('POST /api/events', () => {
 describe('Formatos de fecha aceptados', () => {
   test('solo día, con hora sin zona y con zona explícita → 201', async () => {
     const organizer = await crearUsuarioConRol('organizer');
-    for (const date of ['2027-03-15', '2027-03-15T19:00:00', '2027-03-15T19:00:00.000Z', '2027-03-15T19:00:00-03:00']) {
+    // Sin zona horaria se interpreta como UTC (como la forma solo-día), no como hora local del servidor
+    const casos = [
+      ['2027-03-15', '2027-03-15T00:00:00.000Z'],
+      ['2027-03-15T19:00:00', '2027-03-15T19:00:00.000Z'],
+      ['2027-03-15T19:00:00.000Z', '2027-03-15T19:00:00.000Z'],
+      ['2027-03-15T19:00:00-03:00', '2027-03-15T22:00:00.000Z'],
+    ];
+    for (const [date, esperado] of casos) {
       const res = await request(app).post(EVENTS).set('Cookie', organizer.cookie).send({ ...eventoValido, date });
       assert.equal(res.status, 201, date);
-      assert.equal(new Date(res.body.payload.date).getTime(), Date.parse(date), date);
+      assert.equal(res.body.payload.date, esperado, date);
     }
   });
 });
