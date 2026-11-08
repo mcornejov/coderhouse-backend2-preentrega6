@@ -745,6 +745,10 @@ Todos los casos anteriores están automatizados:
 pnpm test
 ```
 
+Cada archivo de tests levanta su propio MongoDB en memoria, por eso el script los corre de a cuatro
+(`--test-concurrency=4`): en una máquina con poca memoria, lanzar los trece a la vez puede agotar el
+tiempo de conexión.
+
 132 tests con MongoDB en memoria. Los 81 heredados siguen pasando (autenticación con Passport,
 registro, login, cookie, configuración, matriz de roles, `authorize`, tabla 401/403 de todas las
 rutas privadas, recurso `/api/users`); solo cambió lo que la consigna cambia: el listado responde
